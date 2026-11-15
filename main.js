@@ -31,8 +31,8 @@ function send(res, status, body, headers) {
 
 const server = http.createServer(async (req, res) => {
     try {
-        if (!['GET', 'PUT'].includes(req.method)) {
-            send(res, 405, 'Метод не дозволений', { Allow: 'GET, PUT' });
+        if (!['GET', 'PUT', 'DELETE'].includes(req.method)) {
+            send(res, 405, 'Метод не дозволений', { Allow: 'GET, PUT, DELETE' });
             return;
         }
 
@@ -60,6 +60,20 @@ const server = http.createServer(async (req, res) => {
 
             await fs.writeFile(filePath, body);
             send(res, 201, 'Картинку збережено');
+            return;
+        }
+
+        if (req.method === 'DELETE') {
+            try {
+                await fs.unlink(filePath);
+            } catch (err) {
+                if (err.code === 'ENOENT') {
+                    send(res, 404, 'Картинку не знайдено');
+                    return;
+                }
+                throw err;
+            }
+            send(res, 200, 'Картинку видалено');
             return;
         }
 
