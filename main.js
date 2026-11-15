@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import superagent from 'superagent';
 
 const program = new Command();
 
@@ -29,14 +30,51 @@ function send(res, status, body, headers){
 }
 
 const server = http.createServer(async (req, res) => {
-    try{
-       send(res, 200, 'ok');
-    } catch (err){
-     if (res.headersSent){
-        res.end();
-        return;
-     }
-     send(res, 500, 'Внутрішня помилка сервера');
+    try {
+        if (req.method !== 'GET') {
+            send(res, 405, 'Метод не дозволений', { Allow: 'GET' });
+            return;
+        }
+
+        const pathname = req.url.split('?')[0];
+        const match = pathname.match(/^\/(\d{3})$/);
+        if (!match) {
+            send(res, 404, 'Картинку не знайдено');
+            return;
+        }
+        const code = match[1];
+
+        const filePath = path.join(cacheDir, code + '.jpg');
+
+        let image;
+        try {
+            image = await fs.readFile(filePath);
+        } catch (err) {
+            if (err.code !== 'ENOENT') {
+                throw err;
+            }
+        }
+        if (image) {
+            send(res, 200, image, { 'Content-Type': 'image/jpeg', 'X-Cache': 'HIT' });
+            return;
+        }
+
+        let response;
+        try {
+            response = await superagent.get('https://http.cat/' + code);
+        } catch (err) {
+            send(res, 404, 'Картинку не знайдено');
+            return;
+        }
+
+        await fs.writeFile(filePath, response.body);
+        send(res, 200, response.body, { 'Content-Type': 'image/jpeg', 'X-Cache': 'MISS' });
+    } catch (err) {
+        if (res.headersSent) {
+            res.end();
+            return;
+        }
+        send(res, 500, 'Внутрішня помилка сервера');
     }
 });
 
