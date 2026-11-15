@@ -17,22 +17,22 @@ const options = program.opts();
 
 const cacheDir = path.resolve(options.cache);
 
-try{
-await fs.mkdir(cacheDir, { recursive: true});
-} catch(err){
+try {
+    await fs.mkdir(cacheDir, { recursive: true });
+} catch (err) {
     console.error('Не вдалося створити теку кешу:', err.message);
     process.exit(1);
 }
 
-function send(res, status, body, headers){
-    res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', ...headers});
+function send(res, status, body, headers) {
+    res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', ...headers });
     res.end(body);
 }
 
 const server = http.createServer(async (req, res) => {
     try {
-        if (req.method !== 'GET') {
-            send(res, 405, 'Метод не дозволений', { Allow: 'GET' });
+        if (!['GET', 'PUT'].includes(req.method)) {
+            send(res, 405, 'Метод не дозволений', { Allow: 'GET, PUT' });
             return;
         }
 
@@ -45,6 +45,23 @@ const server = http.createServer(async (req, res) => {
         const code = match[1];
 
         const filePath = path.join(cacheDir, code + '.jpg');
+
+        if (req.method === 'PUT') {
+            const chunks = [];
+            for await (const chunk of req) {
+                chunks.push(chunk);
+            }
+            const body = Buffer.concat(chunks);
+
+            if (body.length === 0) {
+                send(res, 400, 'Тіло запиту порожнє');
+                return;
+            }
+
+            await fs.writeFile(filePath, body);
+            send(res, 201, 'Картинку збережено');
+            return;
+        }
 
         let image;
         try {
